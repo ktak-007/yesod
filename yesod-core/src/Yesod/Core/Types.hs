@@ -1,7 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
@@ -17,8 +16,7 @@ import           Control.Arrow                      (first)
 import           Control.Exception                  (Exception)
 import           Control.Monad                      (ap)
 import           Control.Monad.IO.Class             (MonadIO (liftIO))
-import           Control.Monad.Logger               (LogLevel, LogSource,
-                                                     MonadLogger (..))
+import           Control.Monad.Logger               (LogLevel, LogSource, MonadLogger (..), MonadLoggerIO (..))
 import           Control.Monad.Primitive            (PrimMonad (..))
 import           Control.Monad.Trans.Resource       (MonadResource (..), InternalState, runInternalState, MonadThrow (..), ResourceT)
 import           Data.ByteString                    (ByteString)
@@ -29,7 +27,6 @@ import           Data.IORef                         (IORef, modifyIORef')
 import           Data.Map                           (Map, unionWith)
 import qualified Data.Map                           as Map
 import           Data.Monoid                        (Endo (..), Last (..))
-import           Data.Semigroup                     (Semigroup(..))
 import           Data.Serialize                     (Serialize (..),
                                                      putByteString)
 import           Data.String                        (IsString (fromString))
@@ -55,7 +52,6 @@ import           Yesod.Routes.Class                 (RenderRoute (..), ParseRout
 import           Control.Monad.Reader               (MonadReader (..))
 import Control.DeepSeq (NFData (rnf))
 import Yesod.Core.TypeCache (TypeMap, KeyedTypeMap)
-import Control.Monad.Logger (MonadLoggerIO (..))
 import UnliftIO (MonadUnliftIO (..), SomeException)
 
 -- Sessions
