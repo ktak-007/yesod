@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Yesod.Core.Class.Handler
     ( MonadHandler (..)
@@ -38,6 +39,7 @@ class (MonadResource m, MonadLogger m) => MonadHandler m where
     type SubHandlerSite m
     liftHandler :: HandlerFor (HandlerSite m) a -> m a
     liftSubHandler :: SubHandlerFor (SubHandlerSite m) (HandlerSite m) a -> m a
+    handlerToWidget' :: (HandlerSite m ~ site, SubHandlerSite m ~ sub) => m a -> WidgetFor sub site a
 
 liftHandlerT :: MonadHandler m => HandlerFor (HandlerSite m) a -> m a
 liftHandlerT = liftHandler
@@ -50,6 +52,7 @@ instance MonadHandler (HandlerFor site) where
     {-# INLINE liftHandler #-}
     liftSubHandler (SubHandlerFor f) = HandlerFor f
     {-# INLINE liftSubHandler #-}
+    handlerToWidget' (HandlerFor f) = WidgetFor $ f . wdHandler
 
 instance MonadHandler (SubHandlerFor sub master) where
     type HandlerSite (SubHandlerFor sub master) = master
@@ -66,10 +69,11 @@ instance MonadHandler (SubHandlerFor sub master) where
     {-# INLINE liftHandler #-}
     liftSubHandler = id
     {-# INLINE liftSubHandler #-}
+    handlerToWidget' (SubHandlerFor f) = WidgetFor $ f . wdHandler
 
-instance MonadHandler (WidgetFor site) where
-    type HandlerSite (WidgetFor site) = site
-    type SubHandlerSite (WidgetFor site) = site
+instance MonadHandler (WidgetFor sub site) where
+    type HandlerSite (WidgetFor sub site) = site
+    type SubHandlerSite (WidgetFor sub site) = sub
     liftHandler (HandlerFor f) = WidgetFor $ f . wdHandler
     {-# INLINE liftHandler #-}
     liftSubHandler (SubHandlerFor f) = WidgetFor $ f . wdHandler
@@ -96,12 +100,12 @@ GO(ConduitM i o)
 #undef GOX
 
 class MonadHandler m => MonadWidget m where
-    liftWidget :: WidgetFor (HandlerSite m) a -> m a
-instance MonadWidget (WidgetFor site) where
+    liftWidget :: WidgetFor (SubHandlerSite m) (HandlerSite m) a -> m a
+instance MonadWidget (WidgetFor sub site) where
     liftWidget = id
     {-# INLINE liftWidget #-}
 
-liftWidgetT :: MonadWidget m => WidgetFor (HandlerSite m) a -> m a
+liftWidgetT :: MonadWidget m => WidgetFor (SubHandlerSite m) (HandlerSite m) a -> m a
 liftWidgetT = liftWidget
 {-# DEPRECATED liftWidgetT "Use liftWidget instead" #-}
 

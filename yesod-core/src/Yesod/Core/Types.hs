@@ -245,22 +245,22 @@ type YesodApp = YesodRequest -> ResourceT IO YesodResponse
 -- | A generic widget, allowing specification of both the subsite and master
 -- site datatypes. While this is simply a @WriterT@, we define a newtype for
 -- better error messages.
-newtype WidgetFor site a = WidgetFor
-    { unWidgetFor :: WidgetData site -> IO a
+newtype WidgetFor sub site a = WidgetFor
+    { unWidgetFor :: WidgetData sub site -> IO a
     }
     deriving Functor
 
-data WidgetData site = WidgetData
+data WidgetData sub site = WidgetData
   { wdRef :: {-# UNPACK #-} !(IORef (GWData (Route site)))
-  , wdHandler :: {-# UNPACK #-} !(HandlerData site site)
+  , wdHandler :: {-# UNPACK #-} !(HandlerData sub site)
   }
 
-instance a ~ () => Monoid (WidgetFor site a) where
+instance a ~ () => Monoid (WidgetFor sub site a) where
     mempty = return ()
 #if !(MIN_VERSION_base(4,11,0))
     mappend = (<>)
 #endif
-instance a ~ () => Semigroup (WidgetFor site a) where
+instance a ~ () => Semigroup (WidgetFor sub site a) where
     x <> y = x >> y
 
 -- | A 'String' can be trivially promoted to a widget.
@@ -268,11 +268,11 @@ instance a ~ () => Semigroup (WidgetFor site a) where
 -- For example, in a yesod-scaffold site you could use:
 --
 -- @getHomeR = do defaultLayout "Widget text"@
-instance a ~ () => IsString (WidgetFor site a) where
+instance a ~ () => IsString (WidgetFor sub site a) where
     fromString = toWidget . toHtml . T.pack
       where toWidget x = tellWidget mempty { gwdBody = Body (const x) }
 
-tellWidget :: GWData (Route site) -> WidgetFor site ()
+tellWidget :: GWData (Route site) -> WidgetFor sub site ()
 tellWidget d = WidgetFor $ \wd -> modifyIORef' (wdRef wd) (<> d)
 
 type RY master = Route master -> [(Text, Text)] -> Text
@@ -450,39 +450,39 @@ instance Show HandlerContents where
 instance Exception HandlerContents
 
 -- Instances for WidgetFor
-instance Applicative (WidgetFor site) where
+instance Applicative (WidgetFor sub site) where
     pure = WidgetFor . const . pure
     (<*>) = ap
-instance Monad (WidgetFor site) where
+instance Monad (WidgetFor sub site) where
     return = pure
     WidgetFor x >>= f = WidgetFor $ \wd -> do
         a <- x wd
         unWidgetFor (f a) wd
-instance MonadIO (WidgetFor site) where
+instance MonadIO (WidgetFor sub site) where
     liftIO = WidgetFor . const
 -- | @since 1.6.7
-instance PrimMonad (WidgetFor site) where
-    type PrimState (WidgetFor site) = PrimState IO
+instance PrimMonad (WidgetFor sub site) where
+    type PrimState (WidgetFor sub site) = PrimState IO
     primitive = liftIO . primitive
 -- | @since 1.4.38
-instance MonadUnliftIO (WidgetFor site) where
+instance MonadUnliftIO (WidgetFor sub site) where
   {-# INLINE withRunInIO #-}
   withRunInIO inner = WidgetFor $ \x -> inner $ flip unWidgetFor x
-instance MonadReader (WidgetData site) (WidgetFor site) where
+instance MonadReader (WidgetData sub site) (WidgetFor sub site) where
     ask = WidgetFor return
     local f (WidgetFor g) = WidgetFor $ g . f
 
-instance MonadThrow (WidgetFor site) where
+instance MonadThrow (WidgetFor sub site) where
     throwM = liftIO . throwM
 
-instance MonadResource (WidgetFor site) where
+instance MonadResource (WidgetFor sub site) where
     liftResourceT f = WidgetFor $ runInternalState f . handlerResource . wdHandler
 
-instance MonadLogger (WidgetFor site) where
+instance MonadLogger (WidgetFor sub site) where
     monadLoggerLog a b c d = WidgetFor $ \wd ->
         rheLog (handlerEnv $ wdHandler wd) a b c (toLogStr d)
 
-instance MonadLoggerIO (WidgetFor site) where
+instance MonadLoggerIO (WidgetFor sub site) where
     askLoggerIO = WidgetFor $ return . rheLog . handlerEnv . wdHandler
 
 -- Instances for HandlerFor

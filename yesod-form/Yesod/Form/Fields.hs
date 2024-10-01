@@ -581,10 +581,10 @@ $newline never
 -- | Creates an input with @type="radio"@ for selecting one option.
 --
 --   @since 1.7.8
-radioField' :: (Eq a, RenderMessage site FormMessage)
-           => HandlerFor site (OptionList a)
-           -> Field (HandlerFor site) a
-radioField' = withRadioField
+radioField' :: (Eq a, RenderMessage site FormMessage, HandlerSite m ~ site, MonadHandler m)
+           => m (OptionList a)
+           -> Field m a
+radioField' = withRadioField'
     (\theId optionWidget -> [whamlet|
 $newline never
 <.radio>
@@ -613,6 +613,28 @@ withRadioField :: (Eq a, RenderMessage site FormMessage)
            -> Field (HandlerFor site) a
 withRadioField nothingFun optFun =
   selectFieldHelper outside onOpt inside Nothing
+  where
+    outside theId _name _attrs inside' = [whamlet|
+$newline never
+<div ##{theId}>^{inside'}
+|]
+    onOpt theId name isSel = nothingFun theId $ [whamlet|
+$newline never
+<input id=#{theId}-none type=radio name=#{name} value=none :isSel:checked>
+|]
+    inside theId name attrs value isSel display =
+       optFun theId value isSel display [whamlet|
+<input id=#{theId}-#{(value)} type=radio name=#{name} value=#{(value)} :isSel:checked *{attrs}>
+|]
+
+
+withRadioField' :: (Eq a, RenderMessage site FormMessage, HandlerSite m ~ site, MonadHandler m)
+           => (Text -> WidgetFor site ()-> WidgetFor site ()) -- ^ nothing case for mopt
+           -> (Text ->  Text -> Bool -> Text -> WidgetFor site () -> WidgetFor site ()) -- ^ cases for values
+           -> m (OptionList a)
+           -> Field m a
+withRadioField' nothingFun optFun =
+  selectFieldHelper' outside onOpt inside Nothing
   where
     outside theId _name _attrs inside' = [whamlet|
 $newline never
@@ -895,6 +917,52 @@ selectFieldHelper outside onOpt inside grpHdr opts' = Field
           optsFlat <- fmap (olOptions.flattenOptionList) $ handlerToWidget opts'
           unless isReq $ onOpt theId name $ render optsFlat val `notElem` map optionExternalValue optsFlat
           opts'' <- handlerToWidget opts'
+          case opts'' of
+            OptionList{} -> constructOptions theId name attrs val isReq optsFlat
+            OptionListGrouped{olOptionsGrouped=grps} -> do
+                  forM_ grps $ \(grp, opts) -> do
+                    case grpHdr of
+                      Just hdr -> hdr grp
+                      Nothing -> return ()
+                    constructOptions theId name attrs val isReq opts
+    , fieldEnctype = UrlEncoded
+    }
+  where
+    render _ (Left x) = x
+    render opts (Right a) = maybe "" optionExternalValue $ listToMaybe $ filter ((== a) . optionInternalValue) opts
+    selectParser _ [] = Right Nothing
+    selectParser opts (s:_) = case s of
+            "" -> Right Nothing
+            "none" -> Right Nothing
+            x -> case olReadExternal opts x of
+                    Nothing -> Left $ SomeMessage $ MsgInvalidEntry x
+                    Just y -> Right $ Just y
+    constructOptions theId name attrs val isReq opts =
+      forM_ opts $ \opt -> inside
+                           theId
+                           name
+                           ((if isReq then (("required", "required"):) else id) attrs)
+                           (optionExternalValue opt)
+                           (render opts val == optionExternalValue opt)
+                           (optionDisplay opt)
+
+selectFieldHelper'
+        :: (Eq a, RenderMessage site FormMessage, HandlerSite m ~ site, MonadHandler m)
+        => (Text -> Text -> [(Text, Text)] -> WidgetFor site () -> WidgetFor site ()) -- ^ Outermost part of the field
+        -> (Text -> Text -> Bool -> WidgetFor site ()) -- ^ An option for None if the field is optional
+        -> (Text -> Text -> [(Text, Text)] -> Text -> Bool -> Text -> WidgetFor site ()) -- ^ Other options
+        -> Maybe (Text -> WidgetFor site ()) -- ^ Group headers placed inbetween options
+        -> m (OptionList a)
+        -> Field m a
+selectFieldHelper' outside onOpt inside grpHdr opts' = Field
+    { fieldParse = \x _ -> do
+        opts <- fmap flattenOptionList opts'
+        return $ selectParser opts x
+    , fieldView = \theId name attrs val isReq -> do
+        outside theId name attrs $ do
+          optsFlat <- olOptions.flattenOptionList <$> handlerToWidget' opts'
+          unless isReq $ onOpt theId name $ render optsFlat val `notElem` map optionExternalValue optsFlat
+          opts'' <- handlerToWidget' opts'
           case opts'' of
             OptionList{} -> constructOptions theId name attrs val isReq optsFlat
             OptionListGrouped{olOptionsGrouped=grps} -> do
